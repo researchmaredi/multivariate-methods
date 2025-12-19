@@ -1,4 +1,4 @@
-# Multivariate Analysis Portfolio
+# Multivariate Methods
 
 This repository contains a collection of projects demonstrating advanced multivariate statistical techniques. The analyses focus on dimensionality reduction, latent variable modelling, and unsupervised clustering using **R**.
 
@@ -26,4 +26,5 @@ This repository contains a collection of projects demonstrating advanced multiva
 
 ## Tools Used
 - **Language:** R
+
 - **Libraries:** `FactoMineR`, `psych`, `CCA`, `cluster`, `tidyverse`, `ggplot2`
