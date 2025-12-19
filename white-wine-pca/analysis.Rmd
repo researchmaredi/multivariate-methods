@@ -1,0 +1,377 @@
+---
+title: "STSA6823 Assignment 1"
+author: "Madimetja Maredi 2014095653"
+date: "`r format(Sys.time(), '%d %B %Y')`"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+# Introduction: Aims and Purpose
+
+The primary goal of this analysis is to investigate the underlying structure of the white wine dataset. The dataset contains 11 physicochemical variables for a large number of white wines. Managing and interpreting 11 distinct variables simultaneously is complex. Therefore, we will use Principal Component Analysis (PCA) to reduce the dimensionality of the data.
+
+The aims are as follows:
+
+1.  To identify a smaller set of new, uncorrelated variables, called principal components (PCs), that capture most of the original information. 
+
+2.  To understand the nature of these principal components by examining their relationship with the original variables.  
+
+3.  To summarize the main patterns of variation in the physicochemical properties of white wines.
+
+This process will help us understand which combinations of chemical properties vary most across different white wines, providing a simpler yet comprehensive overview of the data.
+
+
+# Materials and Methods
+
+1.  **Data Loading and Preparation**: The data was loaded and inspected. The `quality` variable was removed as it is a response variable, not a predictor, and this analysis focuses on the relationships between the physicochemical properties.
+
+2.  **Preliminary Analysis**: We checked for missing data and calculated descriptive statistics to understand the distribution and scale of each variable. We also computed and visualized a correlation matrix to identify initial relationships between variables.
+
+3.  **PCA Execution**: PCA was performed on the data. Because the variables were measured on different scales (e.g., pH vs. `residual.sugar`), standardisation was necessary to prevent variables with larger variances from dominating the analysis (STSA6823 Course Material, 2025). The `principal()` function from the `psych` package was used as it automatically standardizes the data (STSA6823 Course Material, 2025).
+
+4.  **Interpretation**: The number of principal components to retain was determined using a scree plot and parallel analysis. The retained components were interpreted by examining their loadings (the correlations between the original variables and the components). A varimax rotation was applied to simplify the loading structure for easier interpretation (STSA6823 Course Material, 2025).
+
+The main R packages used were `tidyverse` for data manipulation, `psych` and `FactoMineR` for the core PCA, and `corrplot` for visualization.
+
+
+
+```{r,message=FALSE, warning=FALSE,echo=FALSE}
+library(tidyverse)
+library(psych)
+library(knitr) 
+library(corrplot)
+library(FactoMineR) 
+library(factoextra)
+
+wine_data <- read.csv("winequalitywhite.csv", sep = ";", dec = ".")
+```
+
+
+# Preliminary Analysis
+
+## 1. We begin by inspecting the data's structure to understand its size and format.
+
+```{r,message=FALSE, warning=FALSE,echo=FALSE}
+# Display the structure of the data
+str(wine_data)
+
+# Check for missing values
+cat("Total missing values in the dataset:", sum(is.na(wine_data)), "\n")
+```
+The dataset contains **4,898 observations (samples) and 12 variables**. There are **no missing values** in the dataset. We remove the `quality` variable to focus the PCA on the physicochemical predictors.
+
+```{r,message=FALSE, warning=FALSE,echo=FALSE, results='hide'}
+# Remove the 'quality' column for the PCA
+wine_pca_data <- wine_data %>% select(-quality)
+
+# Display the first few rows of the data to be used in PCA
+head(wine_pca_data)
+```
+
+
+
+## 2. We now calculate summary statistics for the 11 variables.
+
+```{r,message=FALSE, warning=FALSE,echo=FALSE}
+describe(wine_pca_data)
+```
+
+**Table 1: Summary of the Data**
+
+The summary table above shows that the variables are measured on **different scales**. For instance, `residual.sugar` has a mean of 6.39 and a standard deviation of 5.07, while `chlorides` has a much smaller mean of 0.046 and sd of 0.022. This confirms the necessity of standardizing the variables before performing PCA to ensure each variable contributes equally to the analysis (STSA6823 Course Material, 2025).
+
+
+
+## 3. We visualise the correlation matrix to examine these relationships.
+
+```{r,message=FALSE, warning=FALSE,echo=FALSE}
+# Calculate the correlation matrix
+cor_matrix <- cor(wine_pca_data)
+
+# Visualize the correlation matrix
+corrplot(cor_matrix, method = "pie", type = "upper", order = "hclust",
+         tl.col = "black", tl.srt = 45, title = "\n\nFigure 1: Correlation Plot of Wine Variables", mar=c(0,0,2,0))
+```
+
+**Figure 1** shows several notable correlations:
+
+* There is a strong **positive correlation** between `density` and `residual.sugar`.
+
+* A strong **negative correlation** exists between `density` and `alcohol`.
+
+* `total.sulfur.dioxide` and `free.sulfur.dioxide` are also strongly positively correlated.
+
+* Acidity measures (`fixed.acidity`, `citric.acid`, `pH`) show moderate inter-correlations.
+
+The presence of these correlated groups suggests that PCA will be effective in reducing the data's dimensionality (STSA6823 Course Material, 2025).
+
+
+# Major Analysis: Principal Component Results
+
+## 1. Determining the Number of Principal Components.
+
+We use a **scree plot** and **parallel analysis** to decide how many principal components to retain. Parallel analysis compares the eigenvalues from our data to those from a randomly generated dataset of the same size. We retain components whose eigenvalues are greater than those from the random data.
+
+```{r,message=FALSE, warning=FALSE,echo=FALSE}
+# Perform parallel analysis
+fa_parallel <- fa.parallel(wine_pca_data, fa = "pc", n.iter = 100, show.legend = TRUE)
+```
+
+**Figure 2: Parallel Analysis Scree Plot**
+
+Based on the scree plot in **Figure 2**, we should retain components that are above the dotted red line (the simulated random data). According to this, **four components** have eigenvalues greater than what would be expected by chance. The Kaiser criterion (eigenvalues > 1) also suggests retaining the first four components. Therefore, we will proceed with **k=4 principal components** (STSA6823 Course Material, 2025).
+
+## 2. Importance of Principal Components.
+
+```{r,message=FALSE, warning=FALSE,echo=FALSE}
+# Run PCA without rotation to see the initial variance explained
+pca_results_unrotated <- principal(wine_pca_data, nfactors = 4, rotate = "none")
+
+# Display the variance accounted for by the 4 components
+pca_results_unrotated$Vaccounted
+```
+
+**Table 2: Quality of the Principal Component Solution**
+
+Table 2 shows the quality of our 4-component solution.
+
+* **SS loadings**: These are the eigenvalues, representing the variance of each component. PC1 has the highest variance (3.22), followed by PC2 (1.58), PC3 (1.22), and PC4 (1.02) (STSA6823 Course Material, 2025).
+
+* **Cumulative Var**: The four components together account for **64% of the total variance** in the original 11 variables (STSA6823 Course Material, 2025). This is a good level of data reduction.
+
+## 3. Rotation and Nature of Principal Components.
+
+We first inspect the unrotated loadings. However, to get a clearer, more interpretable structure, we will use a **Varimax rotation**. This method simplifies the components by maximizing the loading of each variable on a single component.
+
+```{r,message=FALSE, warning=FALSE,echo=FALSE}
+# Run PCA with Varimax rotation
+pca_results_rotated <- principal(wine_pca_data, nfactors = 4, rotate = "varimax")
+
+# Print the rotated loadings. Loadings < 0.3 are suppressed for clarity.
+print(pca_results_rotated$loadings, cutoff = 0.3)
+```
+
+**Table 3: Varimax Rotated Component Loadings**
+
+The rotated loadings in **Table 3** give us a much clearer picture for interpreting the components(Nature of Principal Components):
+
+* **RC1: "Acidity & Density" Dimension.** This component shows strong positive loadings for density (0.89), residual.sugar (0.80), fixed.acidity (0.79), and total.sulfur.dioxide (0.77), and a strong negative loading for pH (-0.74). This component contrasts wines with high density and acidity against those with a higher pH.
+
+* **RC2: "Sulfur" Dimension.** This component is dominated by total.sulfur.dioxide (0.77) and free.sulfur.dioxide (0.63), along with a moderate loading for citric.acid (0.54). It clearly represents the sulfur content and preservative levels of the wine.
+
+* **RC3: "Sweetness vs. Alcohol" Dimension.** This component has a strong negative loading for alcohol (-0.74), and moderate positive loadings for citric.acid (0.39) and free.sulfur.dioxide (0.42). It separates sweeter, lower-alcohol wines from dry, higher-alcohol wines.
+
+* **RC4: "Salts & Acidity" Dimension.** This component is primarily defined by sulphates (0.67), chlorides (0.61), and citric.acid (0.38). It represents a combination of saltiness and acidity-enhancing compounds that may influence flavor and stability.
+
+
+## 4. Contribution of Variables to Principal Components.
+
+We can visualise the contribution of each variable to the principal components using a variables plot.
+
+```{r,message=FALSE, warning=FALSE,echo=FALSE}
+# Create the PCA object using FactoMineR for the fviz_pca_var plot
+res.pca <- PCA(wine_pca_data, graph = FALSE)
+
+# Plot the variables on the first two dimensions
+fviz_pca_var(res.pca, col.var = "cos2",
+             gradient.cols = c("#00AFBB", "#E7B800", "#FC4E07"), 
+             repel = TRUE, title = "Figure 3: PCA Variables Plot (Dim 1 & 2)")
+```
+
+**Figure 3** visually confirms our interpretation.
+
+* `density`, `fixed.acidity`, and `pH` are strongly associated with Dim 1 (which corresponds to RC1 in the rotated solution). These variables point in similar or opposing directions along this dimension, reinforcing the interpretation of RC1 as the “Acidity & Density” dimension.
+
+* `free.sulfur.dioxide` and `total.sulfur.dioxide` are grouped together and not strongly represented on the first two dimensions. Their arrows are relatively short and point away from the main axes, suggesting that their importance lies in a subsequent dimension (RC2). This aligns with the rotated solution where sulfur compounds dominated RC2.
+
+* `alcohol` and `residual.sugar` are opposed along Dim 2, which aligns with the interpretation of RC3 in the rotated PCA. However, since this is the unrotated PCA result, Dim 2 blends multiple effects (e.g., sulfur, alcohol, and sugar), making the interpretation less clear. The rotated solution more clearly separates these effects.
+
+## 5. Correlations of Variables and Principal Components.
+
+The rotated component loadings are presented in Table 3. These values represent the strength and direction of the correlation between each physicochemical variable and each of the four retained principal components.
+
+```{r ,message=FALSE, warning=FALSE,echo=FALSE, results='asis'}
+# Run PCA with Varimax rotation
+pca_results_rotated <- principal(wine_pca_data, nfactors = 4, rotate = "varimax")
+
+# Print the rotated loadings. Loadings < 0.3 are suppressed for clarity.
+loadings_table <- unclass(pca_results_rotated$loadings)
+kable(loadings_table, caption = "Varimax Rotated Component Loadings (Correlations).", digits = 2)
+```
+
+# Additional Analysis.
+
+## 1. Principal Component Coefficients & Equations.
+
+The component coefficients (or weights) are used to construct the actual PC equations.
+
+```{r,message=FALSE, warning=FALSE,echo=FALSE}
+# Get the component weights (coefficients) from the rotated PCA
+pc_weights <- pca_results_rotated$weights
+
+# Print the weights
+pc_weights
+```
+
+**Table 4: Principal Component Coefficients (Weights)**
+
+Using the weights from **Table 4**, we can write the equations for each rotated component:
+
+* **RC1** = 0.294 * `residual.sugar` + 0.286 * `density` + 0.263 * `total.sulfur.dioxide` + ...
+
+* **RC2** = 0.482 * `fixed.acidity` + 0.335 * `citric.acid` + ...
+
+* **RC3** = 0.374 * `free.sulfur.dioxide ` +0.157 * `alcohol` + ...
+
+* **RC4** = -0.024 * `volatile.acidity` + 0.567 * `chlorides` + ...
+
+These equations show precisely how each original variable contributes to creating the component scores for each wine.
+
+
+## 2. Principal Component Scores.
+
+Each of the 4,898 wines in the dataset can now be described using just four scores instead of 11 variables. These scores represent the wine's position along the new dimensions we've identified.
+
+```{r,message=FALSE, warning=FALSE,echo=FALSE}
+# Get the component scores
+pc_scores <- as.data.frame(pca_results_rotated$scores)
+
+# Show the scores for the first 6 wines
+head(pc_scores)
+```
+
+**Table 5: Principal Component Scores of the First Six Wines**
+
+Let's interpret the first wine's scores:
+
+* It has a very high positive score on RC1 (2.12), suggesting it has much higher acidity and density than average.
+
+* It has a moderately high positive score on RC2 (0.80), indicating it likely has above-average sulfur content.
+
+* It has a slightly negative score on RC3 (-0.23), meaning it may have slightly lower sweetness and higher alcohol.
+
+* It has a strong negative score on RC4 (-1.08), suggesting it is low in salts and volatile acidity.
+
+This scoring allows for easy profiling and comparison of individual wines based on their fundamental characteristics (STSA6823 Course Material, 2025).
+
+# Conclusion
+
+This Principal Component Analysis successfully reduced the complexity of the white wine dataset from 11 correlated variables to four meaningful, uncorrelated components, which collectively explain 64% of the total variance.
+
+The four key dimensions of variation in white wine physicochemical properties were identified as:
+
+1.  **Acidity & Density**: Captures wines with higher fixed acidity, residual sugar, and density, contrasted with those having higher pH.
+
+2.  **Sulfur Content**: The concentration of free and total sulfur dioxide.
+
+3.  **Sweetness vs. Alcohol**: The balance between residual sugar and alcohol content.
+
+4.  **Salts & Volatile Acidity**: Primarily driven by chlorides and sulphates, with contributions from citric and volatile acidity.
+
+By mapping the wines onto these four dimensions, we can now efficiently summarize, visualize, and compare them based on their core underlying chemical profiles. This provides a powerful framework for understanding the dataset without being overwhelmed by the original number of variables.
+
+
+# References
+
+STSA6823 Course Material. (2025). *PCA Exercise 2*
+
+# R Code
+
+```{r full-code, eval=FALSE, echo=TRUE}
+
+# Preliminary Analysis
+
+# Load necessary libraries
+library(tidyverse)
+library(psych)
+library(knitr) 
+library(corrplot)
+library(FactoMineR) 
+library(factoextra)
+
+# Load the dataset (it's semicolon-delimited)
+wine_data <- read.csv("winequalitywhite.csv", sep = ";", dec = ".")
+
+# Display the structure of the data
+str(wine_data)
+
+# Check for missing values
+cat("Total missing values in the dataset:", sum(is.na(wine_data)), "\n")
+
+# Remove the 'quality' column for the PCA
+wine_pca_data <- wine_data %>% select(-quality)
+
+# Display the first few rows of the data to be used in PCA
+head(wine_pca_data)
+
+# Generate descriptive statistics using the describe() function
+describe(wine_pca_data)
+
+# Calculate the correlation matrix
+cor_matrix <- cor(wine_pca_data)
+
+# Visualize the correlation matrix
+corrplot(cor_matrix, method = "pie", type = "upper", order = "hclust",
+         tl.col = "black", tl.srt = 45, title = "\n\nFigure 1: Correlation Plot of Wine Variables", mar=c(0,0,2,0))
+
+
+
+# Major Analysis
+
+# Perform parallel analysis
+fa_parallel <- fa.parallel(wine_pca_data, fa = "pc", n.iter = 100, show.legend = TRUE)
+
+# Run PCA without rotation to see the initial variance explained
+pca_results_unrotated <- principal(wine_pca_data, nfactors = 4, rotate = "none")
+
+# Display the variance accounted for by the 4 components
+pca_results_unrotated$Vaccounted
+
+# Run PCA with Varimax rotation
+pca_results_rotated <- principal(wine_pca_data, nfactors = 4, rotate = "varimax")
+
+# Print the rotated loadings. Loadings < 0.3 are suppressed for clarity.
+print(pca_results_rotated$loadings, cutoff = 0.3)
+
+# Create the PCA object using FactoMineR for the fviz_pca_var plot
+res.pca <- PCA(wine_pca_data, graph = FALSE)
+
+# Plot the variables on the first two dimensions
+fviz_pca_var(res.pca, col.var = "cos2",
+             gradient.cols = c("#00AFBB", "#E7B800", "#FC4E07"), 
+             repel = TRUE, title = "Figure 3: PCA Variables Plot (Dim 1 & 2)")
+
+
+# Run PCA with Varimax rotation
+pca_results_rotated <- principal(wine_pca_data, nfactors = 4, rotate = "varimax")
+
+# Print the rotated loadings. Loadings < 0.3 are suppressed for clarity.
+loadings_table <- unclass(pca_results_rotated$loadings)
+kable(loadings_table, caption = "Varimax Rotated Component Loadings (Correlations).", digits = 2)
+
+
+
+
+# Additional Analysis
+
+
+# Get the component weights (coefficients) from the rotated PCA
+pc_weights <- pca_results_rotated$weights
+
+# Print the weights
+pc_weights
+
+# Get the component scores
+pc_scores <- as.data.frame(pca_results_rotated$scores)
+
+# Show the scores for the first 6 wines
+head(pc_scores)
+
+```
+````
+
+
+
+
+

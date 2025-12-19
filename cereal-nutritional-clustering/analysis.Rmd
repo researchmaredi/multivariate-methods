@@ -1,0 +1,393 @@
+---
+title: "STSA6823 Assignment 4 Part 1"
+author: "Madimetja Maredi 2014095653"
+date: "`r format(Sys.time(), '%d %B %Y')`"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    theme: united
+    number_sections: true
+  pdf_document:
+    toc: true
+---
+
+
+```{r setup, include=FALSE}
+# This chunk sets up the global options for the document.
+# echo = TRUE means the code will be shown in the final document.
+# message = FALSE and warning = FALSE prevent R messages and warnings from appearing.
+knitr::opts_chunk$set(echo = FALSE, message = FALSE, warning = FALSE, fig.align = 'center')
+```
+
+# Introduction and Aims
+
+The primary goal of this analysis is to investigate the underlying nutritional structure of **77** breakfast cereals. The dataset contains 8 distinct nutritional variables, and interpreting them all simultaneously is complex. Therefore, we will use cluster analysis to uncover the natural groupings of cereals that summarise their shared nutritional profiles, with the aim of identifying a distinct cluster of healthy cereals.
+
+The specific aims of this study are:
+
+  * To apply **hierarchical clustering**, using both single and complete linkage with Euclidean distance, to the cereal nutritional data.
+  * To compare the resulting dendrograms, evaluate cluster structure and stability, and select an optimal clustering method and number of clusters.
+  * To perform **k-means clustering** using the selected number of clusters and to compare the results with the hierarchical method to see if a similar grouping structure emerges.
+  * To identify and characterise a **"healthy cereal" cluster** that would be suitable for inclusion in a school cafeteria's daily menu.
+
+# Materials and Methods
+
+## Dataset and Software
+
+The analysis was performed on the `Cereals.csv` dataset, which includes nutritional information for **77 breakfast cereals** across **8 numerical variables**: calories, protein, fat, sodium, fibre, carbohydrates, sugars, and potassium. The analysis was conducted using the **R programming language** in the RStudio environment.
+
+## Data Preprocessing
+
+Before analysis, the data required cleaning. A preliminary check revealed missing values in the potassium, carbohydrates, and sugars columns for three cereals. Since clustering algorithms cannot handle missing data, these three cereals were removed from the dataset, resulting in a final sample size of 74.
+
+The 8 numerical variables were measured on different scales. To prevent variables with larger ranges (e.g., sodium) from dominating the analysis, the data was **standardised** using the `scale()` function in R. This process transforms each variable to have a mean of 0 and a standard deviation of 1.
+
+## Analytical Techniques
+
+Several multivariate techniques were used:
+
+1.  **Principal Component Analysis (PCA)**: Used to reduce the dimensionality of the nutritional data and visualise the main patterns of variation on a biplot.
+
+2.  **Hierarchical Clustering**: An agglomerative (bottom-up) hierarchical clustering approach was applied. The dissimilarity between cereals was calculated using **Euclidean distance**. This distance matrix was then used to build clusters using two different linkage criteria for comparison:
+
+      * **Single Linkage**: The distance between two clusters is the shortest distance between any two points in the different clusters.
+      * **Complete Linkage**: The distance between two clusters is the largest distance between any two points in the different clusters.
+
+3.  **K-Means Clustering**: A non-hierarchical k-means clustering algorithm was also applied to the standardised data. The number of clusters, **k**, was set to **four**, a decision based on visual inspection of the complete linkage dendrogram. To ensure a stable and optimal result, the algorithm was run with 25 random initial starting points (`nstart = 25`).
+
+## Cluster Evaluation and Profiling
+
+The cluster assignments from the complete linkage hierarchical method and the k-means method were compared using a **contingency table** to evaluate their agreement. The clusters were then profiled by calculating the average value for each of the 8 nutritional variables to identify the "healthy cereal" cluster.
+
+# Preliminary analysis
+
+The primary goals are to understand the dataset's basic characteristics, identify any potential issues like missing data, and perform the necessary cleaning and preparation steps. This ensures the data is in a suitable format for the subsequent clustering analysis.
+
+## Sample size
+
+The sample size refers to the number of observations in the dataset. It is a crucial first step to understand the scope of our data and to ensure we have a sufficient number of data points to derive meaningful insights from our clustering models.
+
+```{r sample_size}
+# Load the dataset
+cereals_df <- read.csv("cereals.csv")
+
+# Display the dimensions of the dataset
+dim(cereals_df)
+```
+
+The output `[1] 77  9` indicates that the dataset contains **77 observations** (i.e., different types of cereals) and 9 columns (variables). A sample size of 77 is generally considered adequate for performing a meaningful cluster analysis.
+
+## Number of variables
+
+Understanding the number and type of variables is essential. We need to identify which columns are identifiers (like the cereal name) and which are numerical features that will be used in the clustering algorithm. This helps in correctly formatting the data before analysis.
+
+```{r number_variables}
+# Display the structure of the dataset to see variable types and names
+str(cereals_df)
+```
+
+The dataset contains **9 variables** in total. The `cereal` variable is a character type and serves as an identifier for each observation. The remaining 8 variables (`calories`, `protein`, `fat`, `sodium`, `fiber`, `carbohydrates`, `sugars`, `potassium`) are the numerical features that describe the nutritional profile of each cereal. These 8 variables will be used as inputs for the clustering algorithms.
+
+## Missing data
+
+Missing data can cause errors in many analytical functions and can bias results. It is critical to identify if any missing values exist within the dataset. Clustering algorithms, particularly those based on distance calculations, cannot handle missing values, so they must be addressed.
+
+```{r missing_data}
+# Calculate the sum of missing values for each column
+colSums(is.na(cereals_df))
+
+# Identify the specific rows with missing data
+cereals_df[!complete.cases(cereals_df), ]
+```
+
+The analysis reveals missing values in three variables: `carbohydrates` (1), `sugars` (1), and `potassium` (2). A total of **3 cereals** have incomplete data: 'Almond\_Delight', 'Cream\_of\_Wheat\_(Quick)', and 'Quaker\_Oatmeal'. These observations must be handled before proceeding with the analysis.
+
+## Data cleaning
+
+Data cleaning involves addressing the issues identified previously, namely the missing data and the need for data scaling. Since the variables are on different scales (e.g., `sodium` in hundreds vs. `fat` in single digits), we must standardise the data to prevent variables with larger scales from disproportionately influencing the clustering results.
+
+```{r data_cleaning}
+# Remove rows with any missing values
+cereals_clean <- na.omit(cereals_df)
+# Verify the new dimensions
+dim(cereals_clean)
+
+# Separate the cereal names (identifiers) from the numerical data
+cereal_names <- cereals_clean$cereal
+cereal_numeric <- cereals_clean[, -1] # Exclude the first column
+
+# Scale the numerical data
+cereal_scaled <- scale(cereal_numeric)
+
+# Set the row names of the scaled data to be the cereal names for easy identification
+rownames(cereal_scaled) <- cereal_names
+
+# Display the first few rows of the scaled data to verify
+head(cereal_scaled)
+```
+
+The three rows containing missing data were removed, reducing the sample size to **74 cereals**. The 8 numerical variables were then standardised (scaled) to have a mean of 0 and a standard deviation of 1. The data is now clean, complete, and properly scaled, making it ready for the major analysis phase.
+
+# Major Analysis
+
+This section focuses on the core task of exploring the cereal data's structure using hierarchical clustering and PCA. We will compare linkage methods, select the most appropriate one, determine a suitable number of clusters, and examine the nutritional nature of those clusters.
+
+## Hierarchical Clustering and Dendrograms
+
+First, we calculate the Euclidean distance between each pair of cereals. Then, we use this distance matrix to perform hierarchical clustering with both **single** and **complete** linkage methods. The resulting structures are visualised as dendrograms for comparison.
+
+```{r hc_and_dendrograms}
+# Calculate the Euclidean distance matrix
+dist_matrix <- dist(cereal_scaled, method = "euclidean")
+
+# Perform hierarchical clustering using single and complete linkage
+hc_single <- hclust(dist_matrix, method = "single")
+hc_complete <- hclust(dist_matrix, method = "complete")
+
+# Plot the dendrograms side-by-side for comparison
+par(mfrow = c(1, 2))
+plot(hc_single, main = "Single Linkage Dendrogram", xlab = "", sub = "", cex = 0.6)
+plot(hc_complete, main = "Complete Linkage Dendrogram", xlab = "", sub = "", cex = 0.6)
+```
+
+The two dendrograms show markedly different clustering structures.
+
+  * **Single Linkage**: The dendrogram on the left exhibits a "chaining" effect, where individual cereals are sequentially joined to one large, growing cluster. This results in poorly defined, elongated clusters and is not very useful for identifying distinct groups.
+  * **Complete Linkage**: The dendrogram on the right shows a much more balanced and interpretable structure. It produces distinct, compact, and globular clusters that are well-separated.
+
+## Cluster Stability and Method Selection
+
+The cluster structure is highly dependent on the linkage method used. The **single linkage** method results in an unstable structure. In contrast, the **complete linkage** method produces a more stable and robust structure, yielding clearly separated and more meaningful groups.
+
+Therefore, the **complete linkage** method is chosen for the remainder of the analysis.
+
+## Number of Clusters
+
+Examining the complete linkage dendrogram, a logical choice for the number of clusters is **k=4**. We can see four main branches form if we make a horizontal cut at a height of approximately 8 on the y-axis. This suggests that four clusters is a natural grouping for this data.
+
+## Nature of the Hierarchical Clusters
+
+To understand the characteristics of these four clusters, we can calculate the average nutritional profile for each one. This provides an initial insight into the types of cereal groups present in the data.
+
+```{r hc_cluster_nature}
+# Cut the complete linkage tree into 4 clusters
+hc_clusters <- cutree(hc_complete, k = 4)
+
+# Calculate the mean nutritional profile for each cluster using original data
+hc_cluster_profiles <- aggregate(cereal_numeric, by = list(Cluster = hc_clusters), FUN = mean)
+
+# Print the profiles
+print(hc_cluster_profiles)
+```
+
+The profiles of the four clusters from the hierarchical method reveal distinct nutritional patterns. For instance, cluster 2 has the lowest sugar and calories, while cluster 1 has the highest sugar content. This initial profiling confirms that the clusters represent meaningful differences in the data.
+
+## Biplot
+
+To visualise the relationship between the cereals (observations) and their nutritional attributes (variables) simultaneously, we can use a biplot. This plot is generated from a Principal Component Analysis (PCA) and displays the first two principal components, which capture the most variance in the data.
+
+```{r biplot}
+# Perform PCA on the scaled data
+pca_results <- prcomp(cereal_scaled, scale. = F, center = F)
+
+# Create the biplot
+biplot(pca_results, cex = 0.7, main = "Biplot of Cereal Nutritional Data")
+```
+
+The biplot shows how individual cereals are positioned relative to the nutritional variables (represented by red arrows). Cereals that are close to each other on the plot have similar nutritional profiles. Variables with arrows pointing in similar directions are positively correlated. For example, we can see arrows for `sugars`, `calories`, and `fat` pointing in a similar direction, while the `fiber` arrow points in the opposite direction, indicating a negative correlation. A full interpretation of the components is provided in the next section.
+
+# Additional Analysis
+
+In this section, we provide a detailed interpretation of the principal components, perform k-means clustering, and compare its results to the hierarchical method. Finally, we use these findings to identify and recommend a cluster of "healthy cereals".
+
+## PCA: Nature of the First Two Principal Components
+
+The Principal Component Analysis condenses the 8 nutritional variables into a smaller number of uncorrelated components. The nature of these components is determined by the variable loadings (i.e., the red arrows in the biplot).
+
+  * **Principal Component 1 (PC1)**: This is the horizontal axis on the biplot. Moving from left to right on this axis, we see a strong opposition between one group of variables (`fiber`, `potassium`, `protein`) and another group (`sugars`, `calories`). Variables like `sodium` and `fat` also have positive loadings, meaning they contribute in the same direction as sugars and calories. Therefore, **PC1 can be interpreted as a "Healthiness Index"**. Cereals with low scores on PC1 (on the left) are high in fibre and protein, while cereals with high scores (on the right) are high in sugar and calories.
+
+  * **Principal Component 2 (PC2)**: This is the vertical axis. This component is primarily driven by a contrast between `sodium` and `carbohydrates` (which have high positive loadings, pointing upwards) and `fat` and `potassium` (which have negative loadings, pointing downwards). **PC2 can be interpreted as a "Composition Index"**, separating cereals based on their grain composition and mineral content. Cereals high on this axis tend to be high in sodium and carbohydrates (like corn or rice-based flakes), while those lower on the axis might be richer in fats and potassium (like mueslis or nut-containing cereals).
+
+## K-Means Clustering
+
+We now apply the k-means algorithm using our chosen number of clusters, k=4. Using `nstart = 25` helps ensure a stable and optimal result.
+
+```{r kmeans_clustering}
+# For reproducibility
+set.seed(123) 
+
+# Perform k-means clustering with k=4
+km_results <- kmeans(cereal_scaled, centers = 4, nstart = 25)
+
+# View the cluster sizes
+km_results$size
+```
+
+The k-means algorithm has partitioned the 74 cereals into 4 clusters with sizes of 25, 20, 23, and 6.
+
+## Comparison of Clustering Methods
+
+To determine if "the same picture emerges" from both clustering approaches, we create a contingency table comparing the cluster assignments from both methods.
+
+```{r comparison}
+# Get the k-means cluster assignments
+km_clusters <- km_results$cluster
+
+# Create a contingency table to compare hierarchical and k-means assignments
+comparison_table <- table(Hierarchical = hc_clusters, K_Means = km_clusters)
+
+# Print the table
+print(comparison_table)
+```
+
+The contingency table shows a very strong agreement. The strong diagonal pattern indicates that both methods identify very similar underlying groups. This consistency gives us confidence that the four-cluster solution is meaningful and robust. **The same picture does indeed emerge**.
+
+## Identifying the "Healthy Cereal" Cluster
+
+The final goal is to find a cluster of "healthy cereals" for a school cafeteria. A healthy cereal is typically low in sugar, fat, and sodium, while being high in fibre and protein. We will profile the k-means clusters to identify which one best fits this description.
+
+```{r healthy_cluster}
+# Calculate the mean nutritional profile for each k-means cluster
+cluster_profiles <- aggregate(cereal_numeric, by = list(Cluster = km_clusters), FUN = mean)
+
+# Print the cluster profiles
+print(cluster_profiles)
+
+# Based on the profiles below, Cluster 4 is the healthiest.
+# List the names of cereals in the identified "healthy" cluster
+healthy_cereal_names <- cereal_names[km_clusters == 4]
+print(healthy_cereal_names)
+```
+
+By analysing the `cluster_profiles` table, we can characterise each k-means cluster:
+
+  * **Cluster 1**: Average profile with moderate sugar and calories.
+  * **Cluster 2**: The "sugary kids" cluster. It has by far the **highest average sugar** (12.3g) and is low in fibre and protein.
+  * **Cluster 3**: A high-calorie, high-fat, high-potassium cluster, likely containing muesli and granolas.
+  * **Cluster 4**: The **"healthy" cluster**. This group has the **lowest average sugar (0.83g)**, lowest fat (0.17g), lowest calories (71.7), zero sodium, and the **highest average fibre (9.17g)**.
+
+**Recommendation**: **Cluster 4** is unambiguously the cluster of "healthy cereals". It perfectly matches the criteria of a healthy diet. The cereals in this cluster are: **"100%\_Bran"**, **"All-Bran\_with\_Extra\_Fiber"**, **"Puffed\_Wheat"**, **"Shredded\_Wheat"**, **"Shredded\_Wheat\_'n'Bran"**, and **"Shredded\_Wheat\_spoon\_size"**. These are the cereals that should be recommended for inclusion in the school's daily cafeteria offerings.
+
+
+# R code
+
+```{r,eval=FALSE,echo=TRUE}
+
+# --- 1. Preliminary Analysis ---
+
+## 1.1 Load Data and Check Sample Size
+# Load the dataset from the CSV file
+cereals_df <- read.csv("cereals.csv")
+
+# Display the dimensions (rows, columns) of the dataset
+# This shows 77 observations and 9 variables.
+dim(cereals_df)
+
+## 1.2 Check Number and Type of Variables
+# Display the structure of the dataset to see variable types and names.
+# This confirms there is one character variable ('cereal') and 8 numeric variables.
+str(cereals_df)
+
+## 1.3 Check for Missing Data
+# Calculate the total number of missing values (NA) for each column.
+colSums(is.na(cereals_df))
+
+# Identify and display the specific rows that contain any missing data.
+cereals_df[!complete.cases(cereals_df), ]
+
+## 1.4 Data Cleaning and Preparation
+# Remove all rows with any missing values.
+cereals_clean <- na.omit(cereals_df)
+# Verify the new dimensions (74 observations remaining).
+dim(cereals_clean)
+
+# Separate the cereal names (identifiers) from the numerical data.
+cereal_names <- cereals_clean$cereal
+# Create a data frame with only the 8 numeric nutritional variables.
+cereal_numeric <- cereals_clean[, -1] 
+
+# Standardise (scale) the numerical data to have a mean of 0 and a standard deviation of 1.
+cereal_scaled <- scale(cereal_numeric)
+
+# Assign the cereal names as row names for the scaled data for easy identification in plots.
+rownames(cereal_scaled) <- cereal_names
+
+# Display the first few rows of the scaled data to verify the transformation.
+head(cereal_scaled)
+
+
+# --- 2. Major Analysis ---
+
+## 2.1 Hierarchical Clustering and Dendrograms
+# Calculate the Euclidean distance matrix between all pairs of cereals.
+dist_matrix <- dist(cereal_scaled, method = "euclidean")
+
+# Perform hierarchical clustering using single linkage.
+hc_single <- hclust(dist_matrix, method = "single")
+# Perform hierarchical clustering using complete linkage.
+hc_complete <- hclust(dist_matrix, method = "complete")
+
+# Set up the plotting area to display two plots side-by-side.
+par(mfrow = c(1, 2))
+# Plot the single linkage dendrogram.
+plot(hc_single, main = "Single Linkage Dendrogram", xlab = "", sub = "", cex = 0.6)
+# Plot the complete linkage dendrogram.
+plot(hc_complete, main = "Complete Linkage Dendrogram", xlab = "", sub = "", cex = 0.6)
+
+## 2.2 Analyse the Nature of Hierarchical Clusters
+# Cut the complete linkage dendrogram to create 4 clusters.
+hc_clusters <- cutree(hc_complete, k = 4)
+
+# Calculate the mean nutritional profile for each of the 4 clusters using the original, unscaled data.
+hc_cluster_profiles <- aggregate(cereal_numeric, by = list(Cluster = hc_clusters), FUN = mean)
+
+# Print the resulting cluster profiles.
+print(hc_cluster_profiles)
+
+## 2.3 Principal Component Analysis (PCA) and Biplot
+# Perform PCA on the scaled data.
+pca_results <- prcomp(cereal_scaled, scale. = FALSE, center = FALSE)
+
+# Create a biplot to visualise the first two principal components.
+# This shows the relationship between cereals (points) and nutritional variables (arrows).
+biplot(pca_results, cex = 0.7, main = "Biplot of Cereal Nutritional Data")
+
+
+# --- 3. Additional Analysis ---
+
+## 3.1 K-Means Clustering
+# Set a seed for reproducibility of the random starting points.
+set.seed(123) 
+
+# Perform k-means clustering with k=4 and 25 random initial starts.
+km_results <- kmeans(cereal_scaled, centers = 4, nstart = 25)
+
+# View the number of cereals in each of the 4 k-means clusters.
+km_results$size
+
+## 3.2 Comparison of Clustering Methods
+# Extract the cluster assignments from the k-means results.
+km_clusters <- km_results$cluster
+
+# Create a contingency table to compare the cluster assignments from the hierarchical and k-means methods.
+comparison_table <- table(Hierarchical = hc_clusters, K_Means = km_clusters)
+
+# Print the comparison table to evaluate the agreement between the two methods.
+print(comparison_table)
+
+## 3.3 Identify and Profile the "Healthy Cereal" Cluster
+# Calculate the mean nutritional profile for each k-means cluster using the original data.
+cluster_profiles <- aggregate(cereal_numeric, by = list(Cluster = km_clusters), FUN = mean)
+
+# Print the profiles to identify the healthiest cluster.
+print(cluster_profiles)
+
+# Based on the profiles, identify the cereals belonging to the "healthy" cluster (Cluster 4).
+healthy_cereal_names <- cereal_names[km_clusters == 4]
+
+# Print the names of the cereals in the recommended healthy cluster.
+print(healthy_cereal_names)
+```
+
+

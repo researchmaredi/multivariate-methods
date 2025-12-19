@@ -1,0 +1,479 @@
+---
+title: "Assignment 2"
+author: "Madimetja Maredi 2014095653"
+date: "`r format(Sys.time(), '%d %B %Y')`"
+output: pdf_document
+---
+
+# Introduction: Aims and Purpose
+
+This analysis investigates the relationship between problem behaviours and environmental factors in a university student population. Given the complexity of interpreting 14 variables simultaneously, Canonical Correlation Analysis (CCA) is used to identify key patterns of association between the two sets.
+
+The aims are to:
+ 
+ * Extract pairs of canonical variates that capture the strongest links between the two variable sets.
+ 
+ * Interpret these variates through their correlations with the original variables.
+ 
+ * Summarize how specific psychosocial factors relate to patterns of problem behaviours.
+
+This approach provides a structured understanding of how students’ behavioural risks align with their personal and environmental profiles.
+
+# Materials and Methods
+
+* **Data Preparation**
+
+The dataset includes 498 students and contains no missing values. All variables were suitable for multivariate analysis.
+
+* **Variable Grouping**
+
+Variables were grouped into two sets:
+
+**Set 1: Problem Behaviours (6 variables)**
+
+CIAS_Total, Tobacco_Use, Alcohol_Use, Illicit_Drug_Use, Unprotected_Sex, Gambling_Behaviour
+
+**Set 2: Personal & Environmental Factors (8 variables)**
+
+Impulsivity, Social_Interaction_Anxiety, Depression, Social_Support,
+Intolerance_of_Deviance, Family_Morals, Family_Conflict, GPA
+
+These sets reflect core behavioural and psychosocial dimensions relevant to student well-being.
+
+The main R packages used were `CCA` for the core analysis, `CCP` for significance testing, `psych` for descriptive statistics, and `corrplot` for visualisation.
+
+
+
+
+
+```{r,message=FALSE, warning=FALSE,echo=FALSE}
+library(psych)
+library(CCA)
+library(CCP)
+library(knitr)
+library(corrplot)
+library(ggpubr)
+library(gridExtra)
+library(kableExtra)
+
+
+data <- read.csv("PIU.txt")
+
+```
+
+
+```{r,message=FALSE, warning=FALSE,echo=FALSE}
+
+data <- data[,-1]
+
+prob_behav <- data[,c("Tobacco_Use" ,"Alcohol_Use","Illicit_Drug_Use","Gambling_Behavior" ,"Unprotected_Sex","CIAS_Total")]
+pers_env <- data[, c("Grade_Point_Average", "Family_Morals", "Social_Support", "Intolerance_of_Deviance", "Impulsivity", "Social_Interaction_Anxiety", "Depression", "Family_Conflict")]
+```
+
+# Preliminary Analysis
+
+## 1. Data Structure and Descriptive Statistics
+
+
+```{r,message=FALSE, warning=FALSE,echo=FALSE}
+
+cat("Total missing values in the dataset:", sum(is.na(data)), "\n")
+cat("Number of observations (students):", nrow(data), "\n")
+cat("Number of variables in Set 1 (Problem Behaviours):", ncol(prob_behav), "\n")
+cat("Number of variables in Set 2 (Personal/Environmental Factors):", ncol(pers_env), "\n")
+```
+
+
+The dataset contains **498 observations and 14 variables**. There are **no missing values**. The variables are divided into a set of **6 problem behaviours** and a set of **8 environmental factors**.
+
+
+
+```{r,message=FALSE, warning=FALSE,echo=FALSE}
+descriptives <- psych::describe(data)
+kable(descriptives[, c("n", "mean", "sd", "min", "max", "skew")], caption = "Summary of the Data", digits = 2)
+```
+
+**Table 1** above shows that the variables are measured on different scales. For instance, `Social_Support` has a mean of 67.90, while `Impulsivity` has a mean of 0.44. This confirms the necessity of using a method like CCA that standardizes the variables to ensure each contributes appropriately to the analysis.
+
+
+## 2. Normality check
+
+```{r,message=FALSE, warning=FALSE,echo=FALSE}
+# Create a list of plots
+plot_list <- lapply(names(data), function(var_name) {
+  gghistogram(data, x = var_name, ggtheme = theme_bw(), bins=20)
+})
+# Arrange all plots in a grid
+ggarrange(plotlist = plot_list, ncol = 4, nrow = 4)
+```
+
+
+
+The output above displays the histograms of all 14 variables used in the analysis. Visual inspection shows that the majority of the variables are approximately normally distributed or only mildly skewed. While minor skewness may still be present, it does not appear severe enough to justify transformation. Therefore, based on the histogram evidence, we proceed with the original (untransformed) variables for Canonical Correlation Analysis without applying any transformations.
+
+
+## 3. Within-Set Correlations
+
+
+```{r,message=FALSE, warning=FALSE,echo=FALSE}
+
+
+colnames(prob_behav) <- c("CIAS", "Tobacco", "Alcohol", "Drugs", "Unprotected", "Gambling")
+colnames(pers_env) <- c("GPA", "Morals", "Support", "Deviance", 
+                        "Impulsivity", "Anxiety", "Depression", "Conflict")
+
+cor_pers <- round(cor(pers_env), 2)
+
+kable(cor_pers, caption = "Correlation Matrix - Environmental Factors")
+
+```
+
+```{r,message=FALSE, warning=FALSE,echo=FALSE}
+cor_prob <- round(cor(prob_behav), 2)
+kable(cor_prob, caption = "Correlation Matrix - Problem Behaviour Variables")
+
+```
+
+
+
+**Table 2** and **Table 3** present the correlations within each of the two variable sets used in the Canonical Correlation Analysis.
+
+Within **Set 1 (Problem Behaviours)**, some moderate relationships are observed. For example, `CIAS` shows moderate positive correlations with both `Tobacco use` (r = 0.46) and `Unprotected sex` (r = 0.36), while `Tobacco`, `Alcohol`, and `Unprotected sex` are also fairly interrelated. These patterns suggest that certain risky behaviours tend to cluster together. On the other hand, `Gambling` stands apart, showing weak or even negative associations with most other variables, indicating it may represent a different behavioural domain.
+
+In **Set 2 (Environmental Factors)**, the relationships are generally weaker but still meaningful. For instance, `Anxiety` and `Depression` are positively related (r = 0.29), and both are negatively associated with `Support`, suggesting that lower perceived social support is linked with higher emotional distress. Conflict also shows small to moderate associations with several psychological factors, further reinforcing the idea of an underlying psychosocial dynamic.
+
+Altogether, these within-set correlations show that the variables are reasonably related, which supports the decision to use Canonical Correlation Analysis to examine how these two sets of factors connect.
+
+
+
+
+# Major Analysis
+
+## 1. Canonical Correlations
+
+```{r,message=FALSE, warning=FALSE,echo=FALSE}
+canonical <- cc(prob_behav, pers_env)
+```
+
+```{r,message=FALSE, warning=FALSE,echo=FALSE}
+lambda <- canonical$cor
+kable(lambda, caption = "Canonical Correlations")
+```
+
+From the table, the highest canonical correlation (0.5746) is observed for the first pair of canonical variates, indicating that this pair captures the strongest linear relationship between the two variable sets. The second pair also shows a moderate correlation of 0.4851, while the remaining pairs display considerably lower values.
+
+## 2. Significance of canonical correlations
+
+To determine the number of canonical functions to retain, we use Wilks' Lambda to test their statistical significance. Only functions with **p < 0.0001** are considered statistically significant and retained for interpretation.
+
+
+
+```{r,message=FALSE, warning=FALSE,echo=FALSE}
+cc_results <- cc(prob_behav, pers_env)
+p <- ncol(prob_behav)
+q <- ncol(pers_env)
+n <- nrow(data)
+wilks_results <- p.asym(cc_results$cor, n, p, q, tstat = "Wilks")
+
+```
+
+Examining the Wilks' Lambda output:  
+
+* Row 1 evaluates the null hypothesis that all six canonical correlations (Functions 1 to 6) are simultaneously zero. The test yields a highly significant result (p < 0.0001), indicating that at least one canonical function explains a meaningful portion of the shared variance. Thus, we reject the null hypothesis.
+
+* Row 2 tests the significance of the remaining five canonical correlations (Functions 2 to 6) after removing the first. The result remains highly significant (p < 0.0001), so we reject the null hypothesis and retain the second function.
+
+* Row 3 examines the remaining four correlations (Functions 3 to 6) after excluding the first two. The test yields a p-value of 2.30e-08, still below our threshold of 0.0001, indicating that the third canonical function is also statistically significant.
+
+* Row 4 evaluates Functions 4 to 6, yielding a p-value of 0.000256, which exceeds the specified significance level. We therefore fail to reject the null hypothesis, suggesting that the fourth function is not statistically significant.
+
+* Rows 5 and 6 further test Functions 5 to 6 and Function 6 individually. Both p-values (0.0139 and 0.9535, respectively) are well above the 0.0001 threshold, confirming that these functions are not significant.
+
+Based on these results, we retain the first three canonical functions for interpretation.
+
+## 3. Correlations of variables and canonical variables 
+
+```{r,message=FALSE, warning=FALSE,echo=FALSE}
+
+
+Corr1 <- canonical$scores$corr.X.xscores
+colnames(Corr1) <- paste0("U", 1:ncol(Corr1))
+kable(Corr1, caption = "Correlation between Set 1 variables and canonical variables", format = "simple", digits = 2)
+
+
+
+
+```
+
+**Table 5** display the correlations between Set 1 variables and the canonical variates. The first canonical variate, U1, has strong positive correlations with CIAS (0.74), Alcohol use (0.70), Unprotected behaviour (0.71), and Tobacco use (0.63), indicating that higher scores on U1 correspond to greater involvement in these problem behaviours. The second canonical variate, U2, is most strongly associated with Gambling (0.89), suggesting this variate captures variation mainly related to gambling activity. Correlations with other variables on U2 and the later canonical variates are generally weaker or mixed.
+
+```{r,message=FALSE, warning=FALSE,echo=FALSE}
+
+Corr2 <- canonical$scores$corr.Y.yscores
+colnames(Corr2) <- paste0("V", 1:ncol(Corr2))
+kable(Corr2, caption = "Correlation between Set 2 variables and canonical variables", format = "simple", digits = 2)
+
+```
+
+**Table 6** present the correlations between Set 2 variables and the canonical variates. The first canonical variate, V1, is strongly negatively correlated with Deviance (-0.82) and moderately negatively correlated with GPA (-0.40) and Morals (-0.20), while showing a strong positive correlation with Impulsivity (0.70). This suggests that higher V1 scores reflect higher impulsivity but lower deviance and academic performance. The second canonical variate, V2, is positively correlated with Anxiety (0.77) and Depression (0.76), indicating that V2 primarily captures internalizing emotional factors. Other variables show moderate or mixed correlations with subsequent canonical variates.
+
+
+
+## 4. Variance shared between canonical variables
+
+```{r,message=FALSE, warning=FALSE,echo=FALSE}
+
+
+# Canonical correlations
+canonical_cor <- cc_results$cor
+Rc2 <- canonical_cor^2  # Squared canonical correlations
+
+Rc2_table <- data.frame(
+  Canonical_Function = paste0("Function ", 1:length(Rc2)),
+  Rc2 = round(Rc2, 3)
+)
+
+
+kable(Rc2_table, caption = "Variance Shared Between Canonical Variables (Squared Canonical Correlations)")
+
+
+```
+**Table 7** shows the variance shared between the canonical variates for each function. For the first canonical function, U1 and V1 share 33.0% of their variance. Function 2 accounts for 23.5%, while the remaining functions explain progressively less.
+
+These results suggest that only the first two canonical functions reflect meaningful relationships between the two sets of variables. Functions 3 to 6 contribute little shared variance and are not retained for further interpretation.
+
+
+## 5. Variance shared between canonical variables and their own variables 
+
+```{r,message=FALSE, warning=FALSE,echo=FALSE}
+
+x_loadings <- canonical$scores$corr.X.xscores  # Set 1 with U
+y_loadings <- canonical$scores$corr.Y.yscores  # Set 2 with V
+
+
+prop_var_x <- colMeans(x_loadings^2)
+prop_var_y <- colMeans(y_loadings^2)
+
+var_own_table <- data.frame(
+  Canonical_Function = paste0("Function ", 1:length(Rc2)),
+  Prop_Var_Set1 = round(prop_var_x, 3),
+  Prop_Var_Set2 = round(prop_var_y, 3)
+)
+
+kable(var_own_table, caption = "Variance Shared Between Canonical Variables and Their Own Variable Sets")
+
+```
+**Table 8** shows how much variance each canonical variate shares with its own variable set. For example, U1 explains 37.4% of the total variance in Set 1 (problem behaviours), while V1 explains 18.3% of the variance in Set 2 (environmental factors).
+
+This means U1 is a strong summary of its original set, while V1 provides a moderate summary.
+
+Function 2 still represents a meaningful amount of variance in both sets (16.2% and 20.1%). However, the remaining functions (3 to 6) show low proportions of variance explained (under 15%), suggesting weak representation of their own variable sets.
+
+
+ 
+```{r,message=FALSE, warning=FALSE,echo=FALSE}
+
+```
+
+
+# Additional Analysis
+
+## 1. Canonical Variable Coefficients & Equations
+
+```{r,message=FALSE, warning=FALSE,echo=FALSE}
+kable(cc_results$xcoef[,1:2], caption = "Canonical Coefficients for Set 1 (Problem Behaviours)", digits = 3)
+kable(cc_results$ycoef[,1:2], caption = "Canonical Coefficients for Set 2 (Environmental Factors)", digits = 3)
+```
+
+Using **Tables 5 and 6**, the equations for the first canonical pair are:
+
+* **U1** = 0.253* `CIAS_Total` + 0.082 * `Tobacco_Use` + ...
+
+* **V1** = -0.389 * `Grade_Point_Average` + 2.164 * `Impulsivity` + ...
+
+## 2. Canonical Variable Scores
+
+```{r,message=FALSE, warning=FALSE,echo=FALSE}
+scores_all <- data.frame(cc_results$scores$xscores, cc_results$scores$yscores)
+
+
+num_funcs <- ncol(cc_results$scores$xscores)
+colnames(scores_all) <- c(paste0("U", 1:num_funcs), paste0("V", 1:num_funcs))
+
+
+head(scores_all)
+
+```
+
+The output shows the canonical variable scores. Looking at the first canonical variable pair, most students have negative scores on U1 and V1, indicating generally lower problem behaviours and associated risk factors. For the second canonical variable pair, scores vary widely on U2 and V2, reflecting individual differences on secondary behavioural and environmental dimensions. Scores on subsequent canonical variate pairs (U3 to U6 and V3 to V6) show mixed positive and negative values, capturing more subtle variations across students.
+
+
+# Conclusion
+
+This Canonical Correlation Analysis revealed that problem behaviours and psychosocial factors among university students are interconnected along at least two major dimensions:
+
+ * The first dimension links higher impulsivity, lower deviance intolerance, and lower academic performance with greater engagement in online addiction, substance use, and risky sexual behaviour.
+ 
+ * The second dimension is shaped mainly by gambling behaviour, associated with internalising symptoms such as anxiety and depression.
+
+Together, the first two canonical functions explain the most meaningful shared variance between the variable sets, while also representing substantial proportions of variance within their own sets. These findings point to distinct psychosocial profiles underpinning different types of problem behaviours.
+
+Importantly, this analysis simplifies a complex web of 14 variables into just a few interpretable patterns, making it easier to understand the types of students who may be at greater risk and the nature of their underlying challenges. Such insights can be useful for targeted interventions in university health and counselling services.
+
+
+
+# R Code
+
+```{r full-code, eval=FALSE, echo=TRUE}
+
+# --- Load libraries ---
+library(CCA)
+library(CCP)
+library(psych)
+library(knitr)
+library(kableExtra)
+library(corrplot)
+library(ggpubr)
+library(gridExtra)
+
+# --- Load and prepare data ---
+data <- read.csv("PIU.txt")
+data <- data[ , -1]  # remove ID column if present
+
+# Define the two variable sets exactly as used in the assignment
+prob_behav <- data[, c("Tobacco_Use", "Alcohol_Use", "Illicit_Drug_Use",
+                       "Gambling_Behavior", "Unprotected_Sex", "CIAS_Total")]
+pers_env   <- data[, c("Grade_Point_Average", "Family_Morals", "Social_Support",
+                       "Intolerance_of_Deviance", "Impulsivity",
+                       "Social_Interaction_Anxiety", "Depression", "Family_Conflict")]
+
+# --- Preliminary analysis ---
+
+cat("Total missing values:", sum(is.na(data)), "\n")
+cat("Number of observations:", nrow(data), "\n")
+cat("Variables in Problem Behaviours set:", ncol(prob_behav), "\n")
+cat("Variables in Personal/Environmental set:", ncol(pers_env), "\n")
+
+# Descriptive statistics
+descriptives <- psych::describe(data)
+kable(descriptives[, c("n", "mean", "sd", "min", "max", "skew")],
+      caption = "Table 1: Summary of the Data", digits = 2) %>% kable_styling(full_width = FALSE)
+
+# Histograms (visual normality check)
+plot_list <- lapply(names(data), function(var_name) {
+  gghistogram(data, x = var_name, ggtheme = theme_bw(), bins = 20)
+})
+# Arrange histograms in grid (adjust ncol/nrow if needed)
+ggarrange(plotlist = plot_list, ncol = 4, nrow = 4)
+
+# Within-set correlation matrices
+colnames(prob_behav) <- c("CIAS", "Tobacco", "Alcohol", "Drugs", "Unprotected", "Gambling")
+colnames(pers_env)   <- c("GPA", "Morals", "Support", "Deviance", "Impulsivity", "Anxiety", "Depression", "Conflict")
+
+cor_prob <- round(cor(prob_behav), 2)
+cor_pers <- round(cor(pers_env), 2)
+
+kable(cor_prob, caption = "Table 2: Correlation Matrix - Problem Behaviour Variables", digits = 2) %>% kable_styling(full_width = FALSE)
+kable(cor_pers, caption = "Table 3: Correlation Matrix - Personal & Environmental Factors", digits = 2) %>% kable_styling(full_width = FALSE)
+
+# Corrplots side-by-side
+par(mfrow = c(1, 2), mar = c(1,1,4,1))
+corrplot(cor_prob,  method = "pie", type = "upper", order = "hclust",
+         tl.col = "black", tl.srt = 45, title = "\nA) Problem Behaviours")
+corrplot(cor_pers,  method = "pie", type = "upper", order = "hclust",
+         tl.col = "black", tl.srt = 45, title = "\nB) Personal & Environmental Factors")
+par(mfrow = c(1,1))
+
+# --- Major analysis: Canonical Correlation Analysis ---
+# Run CCA (note: cc() expects raw matrices; scaling optional)
+cc_results <- cc(prob_behav, pers_env)
+
+# Canonical correlations
+cor_data <- data.frame(Canonical_Correlation = cc_results$cor)
+kable(cor_data, caption = "Table 4: Canonical Correlations", digits = 4) %>% kable_styling(full_width = FALSE)
+
+# Significance testing (Wilks' Lambda; Rao's F approximation)
+p <- ncol(prob_behav)
+q <- ncol(pers_env)
+n <- nrow(data)
+wilks_results <- p.asym(cc_results$cor, n, p, q, tstat = "Wilks")
+# wilks_results is a list; coerce relevant part to data.frame for printing
+wilks_df <- as.data.frame(wilks_results[1:6])
+rownames(wilks_df) <- paste0("Functions ", c("1-6","2-6","3-6","4-6","5-6","6-6"))
+kable(wilks_df, caption = "Table 5: Wilks' Lambda Significance Tests (Rao's F)", digits = 6) %>% kable_styling(full_width = FALSE)
+
+
+cc_summary <- data.frame(
+  Canonical_Function = paste0("Function ", 1:length(cc_results$cor)),
+  Canonical_Correlation = round(cc_results$cor, 4),
+  Rc2 = round(cc_results$cor^2, 3)
+)
+kable(cc_summary, caption = "Table 6: Canonical Correlations and Rc^2", digits = 4) %>% kable_styling(full_width = FALSE)
+
+# --- Correlations of original variables with canonical variates ---
+Corr1 <- cc_results$scores$corr.X.xscores
+colnames(Corr1) <- paste0("U", 1:ncol(Corr1))
+kable(round(Corr1, 2), caption = "Table 7: Correlation between Set 1 variables and canonical variables", digits = 2) %>% kable_styling(full_width = FALSE)
+corrplot(Corr1, method = "number", is.corr = TRUE, title = "Figure 1: Set 1 v Canonical Variates")
+
+Corr2 <- cc_results$scores$corr.Y.yscores
+colnames(Corr2) <- paste0("V", 1:ncol(Corr2))
+kable(round(Corr2, 2), caption = "Table 8: Correlation between Set 2 variables and canonical variables", digits = 2) %>% kable_styling(full_width = FALSE)
+corrplot(Corr2, method = "number", is.corr = TRUE, title = "Figure 2: Set 2 v Canonical Variates")
+
+# --- Variance shared between canonical variables (Rc^2) ---
+canonical_cor <- cc_results$cor
+Rc2 <- canonical_cor^2
+Rc2_table <- data.frame(
+  Canonical_Function = paste0("Function ", 1:length(Rc2)),
+  Rc2 = round(Rc2, 3)
+)
+kable(Rc2_table, caption = "Table 9: Variance Shared Between Canonical Variables (Rc^2)", digits = 3) %>% kable_styling(full_width = FALSE)
+
+# --- Variance shared between canonical variables and their own variables (redundancy) ---
+x_loadings <- Corr1   # already corr.X.xscores
+y_loadings <- Corr2   # already corr.Y.yscores
+
+prop_var_x <- colMeans(x_loadings^2)
+prop_var_y <- colMeans(y_loadings^2)
+
+red_table <- data.frame(
+  Canonical_Function = paste0("Function ", 1:length(Rc2)),
+  Rc2 = round(Rc2, 3),
+  Prop_Var_Set1 = round(prop_var_x, 3),
+  Redundancy_Set1 = round(prop_var_x * Rc2, 3),
+  Prop_Var_Set2 = round(prop_var_y, 3),
+  Redundancy_Set2 = round(prop_var_y * Rc2, 3)
+)
+kable(red_table, caption = "Table 10: Variance and Redundancy Indices", digits = 3) %>% kable_styling(full_width = FALSE)
+
+# --- Coefficients and equations ---
+x_weights <- cc_results$xcoef[, 1:3]  # show first three if available
+y_weights <- cc_results$ycoef[, 1:3]
+kable(round(x_weights, 3), caption = "Table 11: Canonical Coefficients for Problem Behaviours (first 3 functions)", digits = 3) %>% kable_styling(full_width = FALSE)
+kable(round(y_weights, 3), caption = "Table 12: Canonical Coefficients for Personal/Environmental Factors (first 3 functions)", digits = 3) %>% kable_styling(full_width = FALSE)
+
+
+# U1 = sum( x_weights[,1] * corresponding original variables )
+# V1 = sum( y_weights[,1] * corresponding original variables )
+
+# --- Canonical scores ---
+scores_all <- data.frame(cc_results$scores$xscores, cc_results$scores$yscores)
+num_funcs <- ncol(cc_results$scores$xscores)
+colnames(scores_all) <- c(paste0("U", 1:num_funcs), paste0("V", 1:num_funcs))
+kable(head(scores_all), caption = "Table 13: Canonical Variable Scores (first 6 observations)", digits = 4) %>% kable_styling(full_width = FALSE)
+
+# Scatterplot of canonical variates for Function 1 (U1 vs V1)
+U <- as.data.frame(cc_results$scores$xscores)
+V <- as.data.frame(cc_results$scores$yscores)
+
+ggscatter(data = data.frame(U1 = U$xscores.U1, V1 = V$yscores.V1),
+          x = "U1", y = "V1", add = "reg.line", conf.int = TRUE,
+          cor.coef = TRUE, cor.method = "pearson",
+          xlab = "U1 (Problem Behaviours)", ylab = "V1 (Environmental Factors)")
+
+
+save(cc_results, scores_all, file = "CCA_results.RData")
+write.csv(red_table, file = "redundancy_table.csv", row.names = FALSE)
+
+```
